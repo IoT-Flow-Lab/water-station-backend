@@ -1,0 +1,277 @@
+openapi: 3.0.3
+info:
+  title: Water Station Telemetry API
+  description: |
+    Industry-level API documentation for the Water Station IoT Telemetry Backend.
+    This service ingests real-time weather and station telemetry data over MQTT and serves it via standard HTTP REST endpoints with support for lazy loading, historical range queries, and active sensor status aggregation.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+paths:
+  /telemetry:
+    get:
+      tags:
+        - Telemetry
+      summary: Retrieve paginated telemetry records (supports lazy loading)
+      description: |
+        Returns a paginated list of telemetry data records, sorted by time descending.
+        Use this endpoint to implement "load more" or infinite scroll on front-end interfaces.
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination (starts at 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: Number of records to return per page
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: station_id
+          in: query
+          description: Filter records by specific weather station identifier
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successfully retrieved telemetry data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TelemetryRecord'
+                  meta:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                        description: Total number of records matching criteria
+                      page:
+                        type: integer
+                        description: Current page number
+                      limit:
+                        type: integer
+                        description: Number of records per page
+                      hasNextPage:
+                        type: boolean
+                        description: Flag indicating if more records are available
+
+  /telemetry/latest:
+    get:
+      tags:
+        - Telemetry
+      summary: Fetch the latest telemetry record
+      description: Returns the single most recent telemetry log, optionally filtered by a specific weather station.
+      parameters:
+        - name: station_id
+          in: query
+          description: Filter by specific weather station identifier
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successfully retrieved the latest record
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TelemetryRecord'
+                  - type: 'null'
+                    description: No record exists
+
+  /telemetry/range:
+    get:
+      tags:
+        - Telemetry
+      summary: Query telemetry records within a date-time range
+      description: |
+        Retrieves historical telemetry records within a start and end boundary.
+        Results are returned chronologically (ascending).
+      parameters:
+        - name: start
+          in: query
+          description: Start boundary timestamp (ISO-8601 format)
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: '2026-06-21T00:00:00Z'
+        - name: end
+          in: query
+          description: End boundary timestamp (ISO-8601 format)
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: '2026-06-21T23:59:59Z'
+        - name: station_id
+          in: query
+          description: Filter range by specific weather station identifier
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: Number of records per page for range query results
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Successfully retrieved range data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TelemetryRecord'
+                  meta:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      hasNextPage:
+                        type: boolean
+
+  /telemetry/sensors:
+    get:
+      tags:
+        - Sensors
+      summary: Retrieve summary status of active stations and sensors
+      description: Returns a list of all active weather stations, their latest communication time, and details about each configured sensor on the station.
+      responses:
+        '200':
+          description: Successfully retrieved sensor statuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StationSensorsSummary'
+
+components:
+  schemas:
+    TelemetryRecord:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: The time at which the telemetry was recorded by the station
+        station_id:
+          type: string
+          description: Unique string identifying the weather station
+        uptime_seconds:
+          type: integer
+          description: Uptime in seconds since the station was last booted
+        boot_count:
+          type: integer
+          description: Number of times the station has booted
+        sensors:
+          $ref: '#/components/schemas/SensorsData'
+        topic:
+          type: string
+          description: The MQTT topic the message was published to
+        domain:
+          type: string
+          description: The organization or network domain extracted from the topic
+        device_id:
+          type: string
+          description: Unique device ID extracted from the topic
+        received_at:
+          type: string
+          format: date-time
+          description: The database server's time of ingestion
+
+    SensorsData:
+      type: object
+      properties:
+        dht11:
+          type: object
+          properties:
+            status:
+              type: string
+              example: 'OK'
+            temperature_c:
+              type: number
+              format: float
+              example: 27.2
+            humidity_pct:
+              type: number
+              format: float
+              example: 74.5
+        bmp280:
+          type: object
+          properties:
+            status:
+              type: string
+              example: 'OK'
+            temperature_c:
+              type: number
+              format: float
+              example: 28.1
+            pressure_hpa:
+              type: number
+              format: float
+              example: 1012.3
+
+    StationSensorsSummary:
+      type: object
+      properties:
+        station_id:
+          type: string
+          example: 'WS-C3-E072A17299CC'
+        device_id:
+          type: string
+          example: 'e97d1b32'
+        domain:
+          type: string
+          example: 'sci.pdn.ac.lk'
+        last_seen:
+          type: string
+          format: date-time
+        sensors:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                example: 'dht11'
+              status:
+                type: string
+                example: 'OK'
+              data:
+                type: object
