@@ -1,4 +1,4 @@
-# 🌊 IoT Water Station Telemetry Backend
+# 🌊 IoT weather Station Telemetry Backend
 
 A production-grade, highly optimized, hybrid server (HTTP + MQTT) built with **NestJS**, **TypeORM**, and **TimescaleDB** designed to ingest, process, and query real-time time-series telemetry data from distributed weather and water monitoring stations.
 
